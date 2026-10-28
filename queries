@@ -1,0 +1,71 @@
+-- Infectious Disease Portfolio: queries.sql
+-- Data: CDC National Immunization Survey - Adult COVID Module (NIS-ACM), RespVaxView, 2024-25 season archive
+-- Table name in SQLite: vax
+
+-- 1. Peek at the data
+SELECT * FROM vax LIMIT 10;
+
+-- 2. Pick specific columns
+SELECT "Geography", "Group Name", "Group Category", "Estimate (%)", "Sample Size"
+FROM vax
+LIMIT 20;
+
+-- 3. Which vaccines are in the dataset?
+SELECT DISTINCT "Vaccine" FROM vax;
+
+-- 4. Georgia: share of adults who received a 2024-25 COVID-19 dose, by period
+-- Finding: Georgia rose from 2.6% (Sept 2024) to about 15% by April 2025; month-to-month
+-- changes are within the confidence intervals because sample sizes are small.
+SELECT DISTINCT "Time Period", "Year", "Estimate (%)", "95% CI (%)", "Sample Size"
+FROM vax
+WHERE "Geography Type" = 'State'
+  AND "Geography" = 'Georgia'
+  AND "Vaccine" = 'COVID-19'
+  AND "Group Name" = 'All adults 18+ years'
+  AND "Indicator Category" LIKE 'Received a 2024-2025 COVID-19 dose%';
+
+-- 5. How many rows have suppressed estimates (sample too small)?
+SELECT COUNT(*) FROM vax WHERE "Suppression Flag" = 1;
+
+-- 6. National: all adults, by period
+-- Finding: 4.7% (early Sept 2024) -> 13.7% (late Oct) -> plateau of about 19-22%; 20.4% in April 2025.
+SELECT DISTINCT "Time Period", "Year", "Estimate (%)", "95% CI (%)", "Sample Size"
+FROM vax
+WHERE "Geography Type" = 'National'
+  AND "Vaccine" = 'COVID-19'
+  AND "Group Name" = 'All adults 18+ years'
+  AND "Indicator Category" LIKE 'Received a 2024-2025 COVID-19 dose%';
+
+-- 7. National: by age group, April 2025
+-- Finding: 65+ (39.1%) was about three times the rate of ages 18-49 (12.0%); CIs do not overlap.
+SELECT DISTINCT "Group Category", "Time Period", "Estimate (%)", "95% CI (%)", "Sample Size"
+FROM vax
+WHERE "Geography Type" = 'National'
+  AND "Vaccine" = 'COVID-19'
+  AND "Group Name" = 'Age'
+  AND "Indicator Category" LIKE 'Received a 2024-2025 COVID-19 dose%'
+  AND "Time Period" LIKE 'April%';
+
+-- 8. National: by race/ethnicity (7 level), April 2025
+-- Finding: Highest was White non-Hispanic (23.4%); lowest was American Indian/Alaska Native (7.6%).
+-- Caution: AI/AN (n=364) and NHPI (n=177) estimates are based on small samples.
+SELECT DISTINCT "Group Category", "Estimate (%)", "95% CI (%)", "Sample Size"
+FROM vax
+WHERE "Geography Type" = 'National'
+  AND "Vaccine" = 'COVID-19'
+  AND "Group Name" = 'Race/Ethnicity (7 level)'
+  AND "Indicator Category" LIKE 'Received a 2024-2025 COVID-19 dose%'
+  AND "Time Period" LIKE 'April%'
+ORDER BY "Estimate (%)" DESC;
+
+-- 9. National: by self-perceived equity in seeking healthcare, April 2025
+-- Finding: Adults who said they get better care than other groups: 35.2%;
+-- worse: 13.2% (CI 8.5-18.0, n=1,108).
+SELECT DISTINCT "Group Category", "Estimate (%)", "95% CI (%)", "Sample Size"
+FROM vax
+WHERE "Geography Type" = 'National'
+  AND "Vaccine" = 'COVID-19'
+  AND "Group Name" = 'Self-perceived equity in seeking healthcare compared to other races/ethnicities'
+  AND "Indicator Category" LIKE 'Received a 2024-2025 COVID-19 dose%'
+  AND "Time Period" LIKE 'April%'
+ORDER BY "Estimate (%)" DESC;
