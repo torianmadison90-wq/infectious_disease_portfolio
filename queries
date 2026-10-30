@@ -1,71 +1,306 @@
--- Infectious Disease Portfolio: queries.sql
--- Data: CDC National Immunization Survey - Adult COVID Module (NIS-ACM), RespVaxView, 2024-25 season archive
--- Table name in SQLite: vax
 
--- 1. Peek at the data
-SELECT * FROM vax LIMIT 10;
+SQL Learning Journal: CDC Adult Vaccination Survey Analysis
+Portfolio project: Infectious Disease Data Analysis
+Learning stage: Days 1–3 — SQL foundations, filtering, comparisons, and grouped counts
+Environment: DB Browser for SQLite (macOS)
+Dataset: CDC adult respiratory vaccination survey data, 2024–2025 season (described in the learning conversation as the CDC National Immunization Survey Adult COVID Module / RespVaxView archive)
+SQLite table: vax
+Status: Learning journal / exploratory analysis. Findings reported from the prior practice conversation are not independently reproduced in this document; rerun the queries against the original dataset before presenting them as verified results.
 
--- 2. Pick specific columns
-SELECT "Geography", "Group Name", "Group Category", "Estimate (%)", "Sample Size"
+Project purpose
+I am developing practical SQL and public health data analysis skills by exploring adult respiratory vaccination survey data. I am using SQLite to ask reproducible questions about vaccination estimates by race/ethnicity, sex, geography, age, and perceptions of healthcare equity. I am also practicing how to interpret confidence intervals, sample sizes, and the limitations of survey data.
+
+Guiding question: How do estimated 2024–2025 COVID-19 vaccination percentages vary across adult populations and places?
+
+Dataset and setup
+The practice conversation described the source file as approximately 1.44 million rows and 14 columns, with reporting periods from September 2024 through April 2025. The Day 3 discussion reported 1,440,643 total rows. Treat that count as reported until verified locally using the check below.
+
+Column	How I use it
+Geography Type	Level of geography, such as National, State, HHS Region, or Substate
+Geography	Place label, such as Georgia
+Group Name	Grouping dimension (e.g., Age, Sex, Race/Ethnicity)
+Group Category	The specific category within that dimension (e.g., Female or Male)
+Indicator Name	Name of the measured survey indicator
+Indicator Category	Specific response/measure; critical for selecting the vaccinated indicator
+Time Period	Survey reporting-period text; may contain a date range rather than a single date
+Year	Year field; inspect its actual values before using it for chronology
+Time Type	Type of reporting period
+Estimate (%)	Reported estimate, typically a percentage
+95% CI (%)	Reported 95% confidence interval (as text or a formatted interval)
+Sample Size	Sample size associated with an estimate, when provided
+Vaccine	Vaccine/respiratory-disease category
+Suppression Flag	Identifies values suppressed or withheld in the source
+Important: There may be multiple rows for a place, period, indicator, and subgroup. Some rows are repeated or suppressed. A dataset row is not necessarily a distinct respondent.
+
+Import and inspect in DB Browser
+Open DB Browser for SQLite and open the database, or import the original CDC CSV with File → Import → Table from CSV file.
+Name the imported table vax and check that the first line contains column names.
+In Database Structure, verify that vax exists.
+Use the Execute SQL tab to run the queries. Save the database separately from this public notes file.
+-- Basic import / structure check
+SELECT COUNT(*) AS total_rows FROM vax;
+
+-- Preview actual columns and values
+SELECT * FROM vax LIMIT 5;
+
+-- Find exact subgroup and reporting-period labels
+SELECT DISTINCT "Group Name" FROM vax ORDER BY "Group Name";
+SELECT DISTINCT "Year", "Time Period"
 FROM vax
-LIMIT 20;
+ORDER BY "Year", "Time Period";
+The data source can be obtained through CDC's public data portal. Do not include the full raw dataset in this repository. Link to its official download page or dataset record when confirmed.
 
--- 3. Which vaccines are in the dataset?
-SELECT DISTINCT "Vaccine" FROM vax;
-
--- 4. Georgia: share of adults who received a 2024-25 COVID-19 dose, by period
--- Finding: Georgia rose from 2.6% (Sept 2024) to about 15% by April 2025; month-to-month
--- changes are within the confidence intervals because sample sizes are small.
-SELECT DISTINCT "Time Period", "Year", "Estimate (%)", "95% CI (%)", "Sample Size"
+Day 1 — Writing and interpreting filtered SQL queries
+The basic structure
+SELECT "column 1", "column 2"
 FROM vax
-WHERE "Geography Type" = 'State'
-  AND "Geography" = 'Georgia'
-  AND "Vaccine" = 'COVID-19'
-  AND "Group Name" = 'All adults 18+ years'
-  AND "Indicator Category" LIKE 'Received a 2024-2025 COVID-19 dose%';
+WHERE "some column" = 'some value'
+ORDER BY "column 1" ASC;
+SELECT identifies columns to return.
+FROM vax identifies the table.
+WHERE defines conditions for matching rows.
+AND requires all specified conditions to be true.
+ORDER BY sorts the selected rows; ASC is ascending and DESC is descending.
+DISTINCT removes duplicate combinations of selected columns, not necessarily duplicate records throughout the dataset.
+Double quotes identify SQLite column names containing spaces or special characters; single quotes delimit text values.
+Practice query 1: Perceived equity in seeking healthcare
+Question: How do estimates of receiving a 2024–2025 COVID-19 dose compare across self-perceived healthcare-equity categories among adults nationally?
 
--- 5. How many rows have suppressed estimates (sample too small)?
-SELECT COUNT(*) FROM vax WHERE "Suppression Flag" = 1;
-
--- 6. National: all adults, by period
--- Finding: 4.7% (early Sept 2024) -> 13.7% (late Oct) -> plateau of about 19-22%; 20.4% in April 2025.
-SELECT DISTINCT "Time Period", "Year", "Estimate (%)", "95% CI (%)", "Sample Size"
-FROM vax
-WHERE "Geography Type" = 'National'
-  AND "Vaccine" = 'COVID-19'
-  AND "Group Name" = 'All adults 18+ years'
-  AND "Indicator Category" LIKE 'Received a 2024-2025 COVID-19 dose%';
-
--- 7. National: by age group, April 2025
--- Finding: 65+ (39.1%) was about three times the rate of ages 18-49 (12.0%); CIs do not overlap.
-SELECT DISTINCT "Group Category", "Time Period", "Estimate (%)", "95% CI (%)", "Sample Size"
-FROM vax
-WHERE "Geography Type" = 'National'
-  AND "Vaccine" = 'COVID-19'
-  AND "Group Name" = 'Age'
-  AND "Indicator Category" LIKE 'Received a 2024-2025 COVID-19 dose%'
-  AND "Time Period" LIKE 'April%';
-
--- 8. National: by race/ethnicity (7 level), April 2025
--- Finding: Highest was White non-Hispanic (23.4%); lowest was American Indian/Alaska Native (7.6%).
--- Caution: AI/AN (n=364) and NHPI (n=177) estimates are based on small samples.
-SELECT DISTINCT "Group Category", "Estimate (%)", "95% CI (%)", "Sample Size"
-FROM vax
-WHERE "Geography Type" = 'National'
-  AND "Vaccine" = 'COVID-19'
-  AND "Group Name" = 'Race/Ethnicity (7 level)'
-  AND "Indicator Category" LIKE 'Received a 2024-2025 COVID-19 dose%'
-  AND "Time Period" LIKE 'April%'
-ORDER BY "Estimate (%)" DESC;
-
--- 9. National: by self-perceived equity in seeking healthcare, April 2025
--- Finding: Adults who said they get better care than other groups: 35.2%;
--- worse: 13.2% (CI 8.5-18.0, n=1,108).
-SELECT DISTINCT "Group Category", "Estimate (%)", "95% CI (%)", "Sample Size"
+SELECT DISTINCT
+    "Group Category",
+    "Estimate (%)",
+    "95% CI (%)",
+    "Sample Size"
 FROM vax
 WHERE "Geography Type" = 'National'
   AND "Vaccine" = 'COVID-19'
   AND "Group Name" = 'Self-perceived equity in seeking healthcare compared to other races/ethnicities'
   AND "Indicator Category" LIKE 'Received a 2024-2025 COVID-19 dose%'
   AND "Time Period" LIKE 'April%'
-ORDER BY "Estimate (%)" DESC;
+ORDER BY CAST("Estimate (%)" AS REAL) DESC;
+How it works: Group Name selects the equity topic; Group Category displays the possible responses. The remaining conditions hold the geography, vaccine, outcome, and time period constant so the percentages can be compared. LIKE 'April%' matches text beginning with April. The CAST(... AS REAL) makes numeric ordering explicit if the imported percentage field is text. Before using the cast, confirm that the field contains numeric percentages, not strings with % symbols or suppression markers.
+
+Results reported in the prior walkthrough (verify against local output):
+
+Self-perceived equity category	Estimate (%)	Reported 95% CI (%)	Sample size
+Better than other races or ethnicities	35.2	32.5–37.8	8,327
+Don't know / refused	18.9	17.0–20.9	7,020
+Same as other races or ethnicities	16.5	15.3–17.6	19,333
+Worse than other races or ethnicities	13.2	8.5–18.0	1,108
+Interpretation: The reported percentages vary by perceived access equity. This is an association in survey data—not evidence that perceptions caused vaccination behavior. Verify that each selected row represents the same indicator and reporting period before using these numbers.
+
+Practice query 2: Race/ethnicity comparison
+Question: Which adult race/ethnicity categories have higher and lower estimated coverage in the April reporting period?
+
+SELECT DISTINCT
+    "Group Category" AS race_ethnicity,
+    "Estimate (%)",
+    "95% CI (%)",
+    "Sample Size"
+FROM vax
+WHERE "Geography Type" = 'National'
+  AND "Vaccine" = 'COVID-19'
+  AND TRIM("Group Name") = 'Race/Ethnicity (7 level)'
+  AND "Indicator Category" LIKE 'Received a 2024-2025 COVID-19 dose%'
+  AND "Time Period" LIKE 'April%'
+ORDER BY CAST("Estimate (%)" AS REAL) DESC;
+Here, AS race_ethnicity gives Group Category a useful output name; it does not change the actual database. TRIM strips leading/trailing spaces from a text value.
+
+Results discussed previously (verify before publication as findings):
+
+White, non-Hispanic adults: 23.4% (reported as the highest estimate in that comparison).
+American Indian/Alaska Native adults: 7.6% (95% CI 4.6–10.6; n = 364).
+Native Hawaiian/Pacific Islander adults: 9.4% (95% CI 5.3–13.6; n = 177).
+Careful finding: The earlier query discussion described a range from 23.4% among White non-Hispanic adults to 7.6% among American Indian/Alaska Native adults. The estimates for some smaller groups had wide, overlapping confidence intervals and limited samples; the ranking of their point estimates should not be interpreted as a statistically established difference.
+
+What I learned: A point estimate is not the whole story. Confidence intervals express estimation uncertainty. Overlapping intervals do not prove the absence of a difference, and a formal test of differences would need to account for the survey design and how estimates were produced.
+
+Day 2 — IN, BETWEEN, LIKE, DISTINCT, ORDER BY, and LIMIT
+SQLBolt-style quick reference
+Concept	Example	Meaning
+IN	WHERE "Vaccine" IN ('COVID-19', 'Flu')	Matches any item in a specified list
+BETWEEN	WHERE "Sample Size" BETWEEN 100 AND 500	Inclusive lower and upper bounds (when the field is numeric)
+LIKE	WHERE "Time Period" LIKE 'April%'	Matches a text pattern; % means zero or more characters
+DISTINCT	SELECT DISTINCT "Group Name"	Returns each selected value/combination only once
+ORDER BY	ORDER BY "Sample Size" DESC	Sorts from largest to smallest
+LIMIT	LIMIT 10	Returns at most 10 rows after other conditions are applied
+TRIM	TRIM("Group Name") = 'Sex'	Ignores spaces at the start/end of the text
+AS	"Group Category" AS Sex	Renames a field in the displayed results
+BETWEEN compares according to the stored column type. Don't assume a text date range such as April 1 - April 27 can be treated as a real date, or that a text percentage will sort numerically.
+
+Practice query 3: Compare December with April, by age
+Question: How did Georgia age-group estimates for receipt of a 2024–2025 COVID-19 dose differ between the December and April reporting periods?
+
+First, get the exact reporting labels; don't guess them:
+
+SELECT DISTINCT "Year", "Time Period"
+FROM vax
+WHERE "Time Period" LIKE 'December%'
+   OR "Time Period" LIKE 'April%'
+ORDER BY "Year", "Time Period";
+Then replace the placeholder labels below with those you see in your database:
+
+SELECT DISTINCT
+    "Year",
+    "Time Period",
+    "Group Category" AS age_group,
+    "Indicator Category",
+    "Estimate (%)",
+    "95% CI (%)",
+    "Sample Size"
+FROM vax
+WHERE "Geography" = 'Georgia'
+  AND "Vaccine" = 'COVID-19'
+  AND TRIM("Group Name") = 'Age'
+  AND "Indicator Category" LIKE 'Received a 2024-2025 COVID-19 dose%'
+  AND "Time Period" IN ('EXACT DECEMBER LABEL', 'EXACT APRIL LABEL')
+ORDER BY age_group, "Year", "Time Period";
+How it works: IN replaces a long OR condition on the same column; the ORDER BY groups matching age categories together. The outcome filter is important: without it, the query might mix vaccinated, unvaccinated, confidence, and access questions. Report the year with the label because a reporting-period string may span two calendar years.
+
+Status: The pasted conversation specifies the assignment but does not provide a verified December-versus-April age output. Do not invent an age-group finding. Populate this section only after running the query and inspecting the returned rows.
+
+Practice query 4: Georgia vaccination estimates by sex
+The first attempt selected Year, Time Period, Group Category AS Sex, Indicator Name, Estimate (%), and Sample Size with LIMIT 30, but did not restrict Indicator Category. That could mix different outcomes, making the percentages incomparable.
+
+Corrected query:
+
+SELECT DISTINCT
+    "Year",
+    "Time Period",
+    "Group Category" AS Sex,
+    "Estimate (%)",
+    "95% CI (%)",
+    "Sample Size"
+FROM vax
+WHERE "Geography" = 'Georgia'
+  AND TRIM("Group Name") = 'Sex'
+  AND "Vaccine" = 'COVID-19'
+  AND "Indicator Category" LIKE 'Received a 2024-2025 COVID-19 dose%'
+ORDER BY "Year", "Time Period", Sex;
+Why the correction matters: Every displayed percentage now refers to the same vaccination outcome. The confidence interval column provides context for interpreting variation. LIMIT was removed to avoid cutting off periods or one sex from the comparison.
+
+Prior walkthrough's reported observations (verify): Most reporting periods showed no consistent separation. One December period was described as Male: 16.7% (95% CI 8.7–24.7; n = 92) and Female: 4.5% (95% CI 1.6–7.4; n = 148); a following period reportedly reversed direction (Female: 16.4%, Male: 11.0%).
+
+Interpretation: Apparent differences across single periods deserve caution, especially with small samples, changing survey estimates, and no formal design-adjusted significance test. A reversal alone does not prove a difference was caused by random noise. ORDER BY "Time Period" is alphabetical, not necessarily chronological; examine period labels or use a parsed date field before calling something a trend.
+
+Practice query 5: Geographic ranking with a sample-size filter
+Question: Among state-level geographies, which had the lowest reported April COVID-19 vaccination estimates when restricted to sample sizes above 1,000?
+
+SELECT DISTINCT
+    "Geography",
+    "Estimate (%)",
+    "95% CI (%)",
+    "Sample Size"
+FROM vax
+WHERE "Geography Type" = 'State'
+  AND "Vaccine" = 'COVID-19'
+  AND "Group Name" = 'All adults 18+ years'
+  AND "Indicator Category" LIKE 'Received a 2024-2025 COVID-19 dose%'
+  AND "Time Period" LIKE 'April%'
+  AND "Sample Size" > 1000
+ORDER BY CAST("Estimate (%)" AS REAL) ASC
+LIMIT 10;
+What went wrong in the initial attempt: The sample-size filter was placed after sorting, and LIMIT was placed before the end of the query. SQL has a required clause order: SELECT → FROM → WHERE → GROUP BY → HAVING → ORDER BY → LIMIT (some steps are optional). Put AND "Sample Size" > 1000 in the WHERE block, then ORDER BY, then LIMIT last.
+
+Rows reported in the prior conversation (verify):
+
+Geography	Estimate (%)	Sample size
+Puerto Rico	8.5	1,078
+Alabama	11.4	1,095
+Texas	16.5	3,199
+New Jersey	21.0	1,020
+Pennsylvania	22.3	1,328
+Montana	24.1	1,429
+Illinois	24.3	1,959
+Oregon	26.3	1,052
+District of Columbia	40.8	1,747
+Lessons: LIMIT 10 means up to ten results; it can return fewer. The dataset's Geography Type = 'State' group reportedly includes Puerto Rico and the District of Columbia, which are not states. A filter of Sample Size > 1000 selects for more respondents but does not guarantee representative or precise estimates, and it may exclude many states.
+
+Day 3 — Aggregate with COUNT(*) and GROUP BY
+Question: How is the dataset distributed across vaccines and geography types?
+
+Count rows in each vaccine category
+SELECT
+    "Vaccine",
+    COUNT(*) AS row_count,
+    ROUND(100.0 * COUNT(*) / (SELECT COUNT(*) FROM vax), 1)
+        AS percent_of_all_rows
+FROM vax
+GROUP BY "Vaccine"
+ORDER BY row_count DESC;
+Explanation: COUNT(*) counts records, GROUP BY "Vaccine" forms one result for each distinct vaccine label, ROUND formats a calculated share to one decimal, and ORDER BY row_count DESC puts the largest group first. The subquery (SELECT COUNT(*) FROM vax) supplies the total row count for the denominator. The 100.0 encourages floating-point rather than integer division.
+
+Count rows by geography type
+SELECT
+    "Geography Type",
+    COUNT(*) AS row_count,
+    ROUND(100.0 * COUNT(*) / (SELECT COUNT(*) FROM vax), 1)
+        AS percent_of_all_rows
+FROM vax
+GROUP BY "Geography Type"
+ORDER BY row_count DESC;
+Previously reported checks, not independently rerun:
+
+Total: 1,440,643 records.
+COVID-19 category: 65.2% of rows.
+State category: 71.0% of rows.
+Group labels mentioned: COVID-19, Flu, two RSV categories; State, HHS Region, Substate, National. Exact names and counts should be read directly from the output.
+Crucial distinction: These percentages are shares of table rows, not vaccine uptake percentages and not percentages of surveyed people. A survey can contain many rows for different groups, places, periods, and indicators, sometimes with duplicates. To estimate vaccination coverage, use the properly filtered Estimate (%) field and interpret it using its survey context—never COUNT(*) / total rows.
+
+How I debug SQL: an example checklist
+Start small: SELECT * FROM vax LIMIT 5; to inspect columns and sample values.
+Inspect exact labels: SELECT DISTINCT "Group Name" FROM vax; and SELECT DISTINCT "Indicator Category" FROM vax; when a filter returns nothing.
+Check for trailing spaces: TRIM("Group Name") or LIKE 'Received a 2024-2025 COVID-19 dose%' when imported text is inconsistent. LIKE can match more than one string, so verify the returned values.
+Hold the outcome constant: Always filter Indicator Category for the measure I want before comparing subgroup percentages.
+Remember the order of clauses: SELECT, FROM, WHERE, GROUP BY, HAVING, ORDER BY, LIMIT.
+Verify numeric types: A text value can sort incorrectly. Check with typeof("Estimate (%)"); cast only if formatting is appropriate. In SQLite, CAST on nonnumeric text may produce an unintended value, so exclude or investigate suppressed and blank estimates first.
+Check suppression / missingness: Do not treat a blank estimate or suppression flag as a genuine 0% estimate.
+Avoid hiding problems with DISTINCT: If several identical rows remain in the data source, investigate why they repeat rather than assuming DISTINCT makes them independent observations.
+Use all needed columns during debugging: Display Indicator Category, Time Period, and Year before simplifying the final table.
+Read the results critically: Compare samples and confidence intervals, identify geography definitions, and avoid unsupported causal claims.
+Useful diagnostic queries
+-- What outcomes does the imported table contain?
+SELECT DISTINCT "Indicator Category"
+FROM vax
+WHERE "Vaccine" = 'COVID-19'
+ORDER BY "Indicator Category";
+
+-- Is this a text or numeric estimate field?
+SELECT "Estimate (%)", typeof("Estimate (%)") AS storage_type
+FROM vax
+LIMIT 10;
+
+-- Count missing estimates and flagged observations (verify exact flag encoding)
+SELECT
+    "Suppression Flag",
+    COUNT(*) AS row_count,
+    SUM(CASE WHEN "Estimate (%)" IS NULL
+                  OR TRIM(CAST("Estimate (%)" AS TEXT)) = ''
+             THEN 1 ELSE 0 END) AS missing_estimate_rows
+FROM vax
+GROUP BY "Suppression Flag";
+Findings log and evidence status
+Topic	Learning takeaway / reported observation	Evidence status
+National perceived healthcare equity	Prior output listed estimates from 13.2% to 35.2%	Reported from previous walkthrough; recheck source output
+National race/ethnicity	White non-Hispanic had a higher reported point estimate than the small-sample AI/AN and NHPI categories	Reported; do not infer significant pairwise differences without a suitable test
+Georgia sex comparison	No stable directional pattern reported across periods; one small-sample December gap	Reported; confirm period order and survey methodology
+April state-level geographies (n > 1,000)	Nine rows were reported, including Puerto Rico and D.C.	Reported; rerun query
+Grouped dataset row counts	Total 1,440,643 rows, 65.2% COVID-19 rows, 71.0% State rows	Reported, not a count of respondents
+Georgia age comparison, December vs April	Query prepared; estimates not supplied in the conversation	Not yet validated — to complete
+What I learned and what I will do next
+SQL is not only about returning rows: the filters must make the research question valid. A query can run successfully and still compare unrelated indicators.
+Labels, spaces, date strings, and column types matter when working with real public health datasets.
+Reporting an estimate responsibly means examining confidence intervals, sample sizes, suppression, and geographic definitions.
+Next: Rerun each query locally; record row counts and dates; complete the Georgia age-group December/April comparison; use GROUP BY with additional dimensions; investigate HAVING and CASE; and add one cleaned chart with appropriate context.
+Repository organization
+infectious-disease-portfolio/
+├── README.md
+├── SQL_Learning_Notes_Days_1-3.md    # This file
+└── queries.sql                       # Runnable SQL with comments
+How to upload
+In GitHub, open the repository, choose Add file → Upload files, select this Markdown file and queries.sql, and Commit changes. GitHub renders .md files as formatted text and .sql files as code. Avoid committing the full CDC survey file, especially if it exceeds size limits; keep a link to the source and instructions for reproducing the analysis instead.
+
+Methods and attribution note
+This journal is based on my hands-on SQL exercises and a pasted transcript of an earlier AI-assisted learning conversation. SQL examples were revised for clarity and reproducibility. Numerical results quoted above are transcribed from that conversation and require re-execution against the dataset before being treated as confirmed results. No individual-level data are included.
+
+0%
